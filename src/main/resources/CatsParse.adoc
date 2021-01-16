@@ -1,0 +1,24 @@
+= Cats parse handy function
+
+== simple Parser
+- char('s') create parser for 's' character
+- alpha parser for non digit characters
+- digit parser for digit characters
+- sp for space parser.
+
+
+== Combiner
+- "~" is an And combiner
+- "<*" same as And combiner but ignores the right operand
+- >* same as "<*" but in reverse direction.
+- rep repeat previous parser without consuming the argument. similar to regex '*'
+- rep1 repeat previous parser and consume one character from the argument. Similar to regex '+'
+- orElse similar to regex "|"
+- oneOf1 for one of the parser from argument list must match.
+- ? is same as regex zero or one occurance
+
+== Miscellaneous
+
+- "backtrack" tells the executor to unconsumed the current parser characters if current parser fails
+
+- "soft" tells the executor to unconsumed the current parser characters if any parser down the line fails.

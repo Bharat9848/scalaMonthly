@@ -1,0 +1,710 @@
+
+
+Scala Monthly
+
+    Home
+    About
+    FAQ
+
+January 2021 - The Parser's Gambit
+
+Created on January 4, 2021
+y2021catslibrary
+Beth Harmon sitting across from Borgov
+"The Queen's Gambit" on Netflix
+Introduction
+
+The stakes are high. The game clock is ticking down in Beth Harmon’s match against the reigning world champion. You’re anxiously listening to the match on your super-high-tech radio from the other side of the world. Suddenly, an announcement comes over the air. The match has been called into a recess until the morning. This is your opportunity to help Beth out in her pursuit to become the best chess player in the world! You have access to a computer containing the "ChessEngine3000" chess simulator software (which makes you really cool since this is 1960-something). This "ChessEngine3000" can simulate millions of different scenarios to decide the ideal way for Beth to move forward in her match. However, the "ChessEngine3000" requires the current game state to be input formatted as predefined Scala model classes. The problem is that you only have the data in portable game notation rather than the required model classes. Your task is to write a parser to transform the game notation into the required model classes to help Beth become the world champion!
+
+To complete this challenge you must write a parser that can understand portable game notation (PGN). It is recommended, though not required, that you use the cats-parse library for solving this challenge. Later in this walk-through, we will go through how to solve this challenge using cats-parse.
+
+Here is an example of a PGN movetext we will be parsing:
+
+copy
+1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O Be7 6. Re1 b5 7. Bb3 d6 8. c3
+O-O 9. h3 Nb8 10. d4 Nbd7 11. c4 c6 12. cxb5 axb5 13. Nc3 Bb7 14. Bg5 b4 15.
+Nb1 h6 16. Bh4 c5 17. dxe5 Nxe4 18. Bxe7 Qxe7 19. exd6 Qf6 20. Nbd2 Nxd6 21.
+Nc4 Nxc4 22. Bxc4 Nb6 23. Ne5 Rae8 24. Bxf7+ Rxf7 25. Nxf7 Rxe1+ 26. Qxe1 Kxf7
+27. Qe3 Qg5 28. Qxg5 hxg5 29. b3 Ke6 30. a3 Kd6 31. axb4 cxb4 32. Ra5 Nd5 33.
+f3 Bc8 34. Kf2 Bf5 35. Ra7 g6 36. Ra6+ Kc5 37. Ke1 Nf4 38. g3 Nxh3 39. Kd2 Kb5
+40. Rd6 Kc5 41. Ra6 Nf2 42. g4 Bd3 43. Re6 1/2-1/2
+
+At first this movetext might look kind of intimidating, but don't worry, we are going to break it down a little bit at a time to understand what it means.
+
+Note: We will not be parsing the "tags" that are found in the full PGN spec. We will only be focused on the "movetext." If there are any discrepancies between the PGN specification and this challenge, go ahead and use what this challenge outlines and also let me know so I can look into correcting it.
+Getting Started
+
+    Clone the starter code here. The starter code contains acceptance tests. Get the ChallengeSpec to pass and you are done!
+    Run the tests to ensure you are set up (using sbt test, for example). All tests will be failing for now.
+    If you aren't familiar with chess, don't worry! You really don't need to be to complete this challenge.
+    Read through at least the "Model" section of this post below and you will be on your way!
+
+Note that the starter code contains two main elements: the challenge and the fundamentals. The challenge is the problem described above and the fundamentals are simpler, shorter problems you can solve to brush up on your knowledge of cats-parse prior to completing the full challenge. Feel free to skip the fundamentals if you don't feel like you want/need to do them. Below you will find a walk-through for how to solve all the fundamentals as well as the main challenge.
+
+Tip: It may be helpful as you are going through to run only the tests for either the fundamentals or the challenge. For example, if you only want to run the fundamental tests, you can do so with sbt 'testOnly **.FundamentalsSpec'.
+Model
+
+The starter code for this challenge contains an object called model which contains a set of classes to represent a chess game. This section will walk through the provided model and show how it corresponds to PGN.
+File and Rank
+
+copy
+sealed abstract class File extends Product with Serializable
+object File {
+    case object A extends File
+    case object B extends File
+    case object C extends File
+    case object D extends File
+    case object E extends File
+    case object F extends File
+    case object G extends File
+    case object H extends File
+}
+
+sealed abstract class Rank extends Product with Serializable
+object Rank {
+    case object One extends Rank
+    case object Two extends Rank
+    case object Three extends Rank
+    case object Four extends Rank
+    case object Five extends Rank
+    case object Six extends Rank
+    case object Seven extends Rank
+    case object Eight extends Rank
+}
+
+Chess boards are made up of Files and Ranks. Files are the columns of the board. In PGN these are indicated using the letters a-h starting at the left hand side of the board (if you are looking from the perspective of the white pieces). The Ranks are the rows of the board. There are eight total rows and they are indicated in PGN using the numbers 1-8, starting with the row containing the first white pieces.
+A blank chess board with ranks and files labelled
+Courtesy of apronus.com
+Piece Type
+
+copy
+sealed abstract class PieceType extends Product with Serializable
+object PieceType {
+    case object King extends PieceType
+    case object Queen extends PieceType
+    case object Rook extends PieceType
+    case object Bishop extends PieceType
+    case object Knight extends PieceType
+}
+
+PieceType is used to indicate which type of piece a given move is referring to. In PGN this looks like:
+
+    King: K
+    Queen: Q
+    Rook: R
+    Bishop: B
+    Knight: N
+
+Note that pawn is missing here on purpose because pawns are assumed to be the piece type when no piece type is specified.
+Square
+
+copy
+final case class Square(file: File, rank: Rank)
+
+A single position on the chess board is represented by a coordinate composed of a File and a Rank on the board.
+
+For example: e5 means File.E and Rank.Five.
+
+We will refer to these coordinates as Squares.
+Disambiguator
+
+copy
+sealed abstract class Disambiguator extends Product with Serializable
+object Disambiguator {
+    final case class FileSource(source: File) extends Disambiguator
+    final case class RankSource(source: Rank) extends Disambiguator
+    final case class FileAndRankSource(source: Square) extends Disambiguator
+}
+
+There are times in a chess game when a player makes a move that is ambiguous because there are multiple pieces that could have executed the same move. When this happens, a disambiguator will be placed into the PGN for the move to show which piece it was that executed the move. Types of disambiguators are:
+
+    FileSource: this is when a piece can be disambiguated by using just the File that it came from prior to moving
+    RankSource: this is when a piece cannot be disambiguated by the File it came from, but can be by the Rank that it came from.
+    FileAndRankSource: this is when a piece cannot be disambiguated by either File or Rank alone. When this happens, both the source File and source Rank are included along with the move.
+
+CheckStatus
+
+copy
+sealed abstract class CheckStatus extends Product with Serializable
+object CheckStatus {
+    case object Check extends CheckStatus
+    case object Checkmate extends CheckStatus
+}
+
+In chess, a check is an indicator of whether or not one of the player's kings is directly under attack.
+
+The check status represents whether or not a check was present at the conclusion of a move being represented. There are two types of check and each one has its own symbol in PGN.
+
+    Check is denoted by placing a single plus-sign + at the end of a move's other information
+    CheckMate is denoted by placing a single pound sign # at the end of a move's other information.
+
+Move
+
+copy
+sealed abstract class Move extends Product with Serializable
+object Move {
+    sealed abstract class Castle extends Move
+    object Castle {
+        case object QueenSide extends Castle
+        case object KingSide extends Castle
+    }
+    final case class Promotion(pawnMove: PawnMove, newPiece: PieceType) extends Move
+    final case class Standard(piece: PieceType, end: Square, disambiguator: Option[Disambiguator], isCapture: Boolean, checkStatus: Option[CheckStatus]) extends Move
+    final case class PawnMove(sourceFile: Option[File], end: Square, isCapture: Boolean, checkStatus: Option[CheckStatus]) extends Move
+}
+
+This is the most complicated section of the model. There are several different types of moves that are valid and legal in chess. It will be most helpful to talk about each of these in their own section.
+Castle
+
+A castle is a special kind of move in chess that is indicated with a special notation. I am not going to explain what a castle move is in chess, because it doesn't matter for building this parser. The only thing that you need to know is there are two types of castling: King's side and Queen's side. In PGN, castling looks like:
+
+    KingSide: O-O
+    QueenSide: O-O-O note that those symbols are uppercase letter o's not the number zero
+
+Standard
+
+Standard moves are moves where any piece, other than a pawn, is being moved around the board. The only exception is castling, which was discussed in the section above. Standard moves are kept track of using:
+
+    The type of piece being moved
+    The square where the piece ended up (not where it began)
+    An optional disambiguator
+    An optional CheckStatus
+    An optional indicator showing whether or not this move was a capture (where this piece moves into an opponent's piece thus taking the opponent's piece out of play)
+
+In PGN, these fields are combined to form a move as follows:
+
+Question marks denote optional fields below.
+
+<piece><disambiguator ?><capture indicator ?><end square><check status ?>
+
+For example: 'R3xd4#' means that a piece of type 'R' (rook) was moved, containing a disambiguator of '3' (RankSource disambiguator), this was a capture (from the 'x'), the piece ended on the square 'd4', and the opponent's king was put into checkmate.
+PawnMove
+
+This is any move where a pawn is the piece that is changing positions. The notation for pawn moves is the same as it is for standard moves, except that the piece type is omitted from the beginning. Also note that pawn disambiguators are only ever the File and don't ever use the Rank or FileAndRank to disambiguate. This is because you can always tell pawns apart just by using the source file.
+
+Question marks denote optional fields below.
+
+<file disambiguator ?><capture indicator ?><end square><check status ?>
+
+Note: Whenever the capture indicator is present, the file disambiguator will also be present.
+Promotion
+
+There is a special rule in chess where if a pawn makes it all the way to the enemy's furthest rank, it is able to trade itself for any other PieceType. This most often means upgrading from a pawn to a queen, but it doesn't have to be a queen.
+
+A promotion in PGN is denoted by adding an equals sign following a pawn move and preceding the PieceType that is being upgraded to.
+
+Question marks denote optional fields below.
+
+<file disambiguator ?><capture indicator ?><end square><equal sign ?><piece type ?><check status ?>
+
+Note: Whenever the capture indicator is present, the file disambiguator will also be present. The same is true for whenever the equal sign is present, the pieceType will also be present.
+
+For example: e8=Q+ means that a pawn moved to Square e8, upgraded to a queen, and put the opponents king in check.
+Turn
+
+copy
+sealed abstract class Turn extends Product with Serializable
+object Turn {
+    final case class FullTurn(whiteMove: Move, blackMove: Move) extends Turn
+    final case class PartialTurn(whiteMove: Move) extends Turn
+}
+
+A turn can be either a FullTurn or a PartialTurn. A FullTurn records the move that the white pieces made and the move that the black pieces made. The final turn may not include a move for the black pieces, which is why PartialTurn contains only a move for the white pieces. This is because the game can either end at the completion of a full turn OR after only the white pieces have moved. For this reason, the last turn in a game can be either a FullTurn OR a PartialTurn. The last turn in the game is the only one that can be a PartialTurn, but it does NOT have to be a PartialTurn.
+
+A turn is represented in PGN as a turn number, followed by the move(s) being made within that turn.
+
+For example: '24. e5 d4' means that on the 24th turn of this game, white moved a pawn to e5 and black moved a pawn to d4. Note that we do not need to keep track of turn numbers since we can easily figure out which turn we are on from our location within our list of turns.
+Outcome
+
+copy
+sealed abstract class Outcome extends Product with Serializable
+object Outcome {
+    case object WhiteWins extends Outcome
+    case object BlackWins extends Outcome
+    case object Draw extends Outcome
+    case object Unknown extends Outcome
+}
+
+An Outcome represents who (if anyone) won the game. The possible outcomes are:
+
+    WhiteWins: The player playing the white pieces won the match
+    BlackWins: The player playing the black pieces won the match
+    Draw: The match resulted in a draw
+    Unknown: The match is still ongoing or another unknown event occurred to end the match
+
+In PGN these look as follows:
+
+    WhiteWins: 1-0
+    BlackWins: 0-1
+    Draw: 1/2-1/2
+    Unknown: *
+
+Game
+
+copy
+final case class Game(turns: NonEmptyList[Turn], outcome: Outcome)
+
+The top-level class for a single chess match is Game. Each Game contains a NonEmptyList (a list which contains at least one element) of Turn and an Outcome.
+Intro to Cats Parse
+
+Cats-parse is a parsing library that has out-of-the-box support for cats type classes. If you aren't sure what cats type classes are, then don't worry! You don't need to know about them in order to use this library. The key things to understand about cats-parse are that it makes use of a declarative syntax as well as parser combinators.
+
+Cats-parse's declarative syntax allows you to describe the result you are looking for in your parser rather than the steps required to arrive at that result. The use of parser combinators allows combining multiple different parsers into a single parser with various operations.
+
+Everything after this point is going through solutions to the fundamentals and the main challenge. Stop here if you wish to solve them on your own rather than following this walk-through!
+Fundamentals
+
+As discussed above, these fundamentals are here to help you brush up on your knowledge of cats-parse prior to completing the full challenge. If you feel like you already know how to use cats-parse or you are going to solve the challenge in another way, feel free to skip this section or only do the parts that interest you.
+
+If you would rather follow along directly in the solution code, you can find that on Github here.
+
+There are nine fundamentals included this month. Each one of them was created to illustrate a different core concept of the cats-parse library.
+
+You will find all of the fundamentals inside of the fundamentals Scala object in the starter code.
+Fundamental One
+
+Create a parser that accepts a single character as input where that character can be either a '1' or a '0'. The parser should return parsed values using the provided Binary.Zero and Binary.One.
+
+Example input: 1
+
+Example output: Binary.One
+
+copy
+sealed abstract class Binary extends Product with Serializable
+object Binary {
+    case object Zero extends Binary
+    case object One extends Binary
+}
+val one: Parser[Binary] =
+    char('0').as(Binary.Zero) orElse char('1').as(Binary.One)
+
+Notice that this fundamental has a return type of Parser[Binary]. This means that we are going to be returning an actual parser that is capable of parsing these values correctly rather than writing code that will parse the values directly. This goes back to a previous section where we discussed cats-parse's declarative syntax.
+
+The key elements of this parser are char, as, and orElse.
+
+char allows us to provide a singular character that is expected in order for the input to be valid. For example, char('a') is declaratively stating that the character "a" is expected in a specific location in the input string.
+
+Since Parser is a Functor, we are able to use the as function on it where char('0').as(Binary.Zero) is synonymous with char('0').map(_ => Binary.Zero). It is a way for us to simply map our input characters into the expected output model.
+
+orElse is a parser combinator (a way to combine multiple parsers into a single parser) which allows us to OR parsers together similar to the || operator we are used to using for boolean expressions. In this case, we are creating a parser that will first check for the input character "0" and if it doesn't find it then check for the input character "1".
+Fundamental Two
+
+Create a parser that accepts two characters as input where the first character is any letter (case insensitive) and the second character is any number (from 0-9 inclusive).
+
+Example input: H8
+
+Example output: LetterAndNumber("H8")
+
+copy
+final case class LetterAndNumber(value: String) extends AnyVal
+val two: Parser[LetterAndNumber] =
+    (alpha ~ digit).string.map(LetterAndNumber)
+
+Here we introduce two new parsers: alpha and digit. We also utilize a new parser combinator, ~. Finally, we use the string transformation before we map our result into our model class.
+
+The parsers alpha and digit both come from the cats-parse-provided object Rfc5234 which you will see imported at the top of the fundamentals.scala file. You can look inside of Rfc5234 if you want to understand how these parsers work. Essentially alpha matches on any alphabetical character (case-insensitive) and digit matches on any number 0-9.
+
+The new parser combinator ~ is a way of applying an AND operation to two parsers (similar to && for boolean expressions). This operator indicates that both the item before and the item after it will need to be included in the input. In other words, alpha ~ digit means that there must be an alpha character AND then a digit, in that order.
+
+Without calling the string operator on our parser, the output type would have been (Char, Char). Since we don't need the items separated like this, we can call string in order to concatenate the items of the tuple together into a single string.
+Fundamental Three
+
+Create a parser that is similar to the parser we built in fundamental one, but accepts a string of multiple '1's and '0's and parses them into a NonEmptyList. This means that there must be at least 1 character for the input to be valid.
+
+Example input: 1001
+
+Example output: BinaryList(NonEmptyList.of(Binary.One, Binary.Zero, Binary.Zero, Binary.One))
+
+copy
+final case class BinaryList(value: NonEmptyList[Binary]) extends AnyVal
+val three: Parser[BinaryList] = {
+    val binary = char('0').as(Binary.Zero) orElse1 char('1').as(Binary.One)
+    binary.rep1.map(BinaryList)
+}
+
+Here we introduce two new parser combinators: orElse1 and rep1.
+
+You will notice that the parser we built for binary here is the same as the one we built above in fundamental one, except this time we are combining our two parsers (for zero and one) with orElse1 instead of orElse. The difference between orElse and orElse1 is the type of the resulting parser. Cats-parse provides a type Parser1 which is a subtype of Parser. Parser1 is the same as Parser except that it must consume at least one character on success. This allows us to easily denote when a parser can succeed on an empty input or not.
+
+rep1 is a combinator that is available on all Parser1s. This combinator signifies that the parser directly preceding it will be present at least once and potentially many times. In the case of BinaryList it says that the input will contain binary at least once, but potentially many times (hence why rep1 returns a NonEmptyList). This operation cannot be available for Parser because of the possible infinite-loop condition of a repeating empty input. This is why we needed to change orElse into orElse1 above. The char parser already returns a Parser1, but when we combine using orElse, it broadens the return type to Parser. By using orElse1, we preserve the Parser1 return type that is needed for rep1.
+Fundamental Four
+
+Build a parser for names where a name must contain only alpha characters (meaning letters only, case insensitive), spaces, and single quotes. The first letter of the name must be an alpha character. After that any of the inputs are acceptable.
+
+To reiterate, the requirements for a name to be valid are:
+
+    The name must start with an alphabetical character and be at least one character long
+    The name can only contain alphabetical characters, spaces, and single quotes.
+
+Invalid example input: 'Bob (leading single quote is not allowed)
+
+Valid example input: Brian O'Brien III
+
+Example output: Name("Brian O'Brien III")
+
+copy
+final case class Name(value: String) extends AnyVal
+val four: Parser[Name] = {
+    val allowedChars = List(char('\''), alpha, sp)
+    (alpha ~ oneOf1(allowedChars).rep).string.map(Name)
+}
+
+There are two new combinators used here, oneOf1 and rep. rep is the same as rep1 except the resulting list can be empty. The oneOf1 combinator indicates that at least one character must be consumed and that the character must match one of the parsers included in allowedChars.
+
+Notice that we specifically show that the first character must be alphabetical by putting alpha ~ ... even though alpha is one of the valid characters inside of the list. This is because without this we would also accept spaces and single quotes as valid when they are at the beginning of the input.
+Fundamental Five
+
+Build a parser that can understand sports scores for two opposing teams. The score should be represented as the two teams' scores (numerical, any length) separated by a hyphen that has a single space on either side.
+
+Example input: 123 - 456
+
+Example output: Score(123, 456)
+
+copy
+final case class Score(left: Int, right: Int)
+val five: Parser[Score] = {
+    val multiDigit = digit.rep1.string.map(_.toInt)
+    ((multiDigit <* char('-').surroundedBy(sp)) ~ multiDigit)
+        .map(Score.tupled)
+}
+
+Here we introduce the new combinators <* and surroundedBy.
+
+<* is an operator that will look familiar to those of you who have worked with cats in the past. This operator is actually an alias for the productL operator from cats' Apply type class. In any case, this operator is essentially the same as the ~ operator, except it indicates that the output of the parser on the right hand side of the operator can be ignored. In this example, we are ignoring the hyphen surrounded by whitespace. We know that we need those characters to be present for this input to be valid, but we don't actually need to do anything with them other than verify they are there.
+
+Using <* instead of ~ has a few advantages. The first is performance since this operator signals to the parsing engine that it does not need to hang on to those values. The second benefit of using this operator is that it simplifies the return type of the result of our parser. For example, ((multiDigit ~ char('-').surroundedBy(sp)) ~ multiDigit) has a return type of ((Int, Unit), Int) where ((multiDigit <* char('-').surroundedBy(sp)) ~ multiDigit) has a return type of (Int, Int). Note the extra set of parenthesis around multiDigit <* char('-').surroundedBy(sp). If we didn't have those, our return type would just be Int since the entire right hand side of the <* operator would be ignored.
+
+Note that the *> operator (alias for productR) can also be used to combine parsers. It does the same thing as <* except it ignores the left hand side rather than the right hand side.
+
+The second new combinator, surroundedBy does exactly what it sounds like it does. It is really just providing a simpler/shorter way of writing: sp ~ char('-') ~ sp.
+Fundamental Six
+
+Create a parser that can identify tuples that contain either two or three elements. Tuples should be formatted as comma-separated values with no whitespace. Parsed values should be placed inside of the MyTuple.Two or MyTuple.Three classes.
+
+Example input 1: hello,world
+
+Example output 1: MyTuple.Two("hello", "world")
+
+Example input 2: one,2,three
+
+Example output 2: MyTuple.Three("one", "2", "three")
+
+copy
+sealed abstract class MyTuple extends Product with Serializable
+object MyTuple {
+    final case class Two(one: String, two: String) extends MyTuple
+    final case class Three(one: String, two: String, three: String) extends MyTuple
+}
+val six: Parser[MyTuple] = {
+    val comma = char(',')
+    val item = alpha.rep.string
+    val two = ((item <* comma) ~ item).map(MyTuple.Two.tupled)
+    val three = (item ~ item.surroundedBy(comma) ~ item).map { case ((a, b), c) => MyTuple.Three(a, b, c) }
+    three.backtrack orElse two
+}
+
+The only new operator used above is backtrack. The backtrack operator does not do anything except for in the case of an error being encountered while parsing. To fully understand what backtrack does, it is helpful to think of the parser as it is being run (we will call the module running the parser, "the executor"). The executor goes through the input string and consumes characters one-by-one as they match the definition given in the parser. When a character is encountered that does not match the current parser definition, an error occurs. At this point, the executor will look at other orElse branches in the parser and evaluate those to see if any of them match on the given input. If all branches fail, the executor will return an error. When a failure is encountered in a given branch, the executor does not un-consume any characters before trying new branches of the parser. This means that if the other branches are expecting any of those same characters that have already been consumed, they will fail.
+
+In the case of our parser above, we need to backtrack after the parser three because if it fails, we will need two to be able to consume all of the same characters that three has already consumed.
+
+You may be wondering why backtracking is not the default behavior of cats-parse. The short answer is that backtracking can be rough on performance and make debugging harder too. Backtracking should be avoided as much as possible.
+Fundamental Seven
+
+Create a parser for UserNames where a UserName is composed of segments of alpha characters (letters only, case insensitive) separated by dots. Each alpha segment must contain at least 1 character and the input cannot end with a dot.
+
+Example input: jess.day.one
+
+Example output: UserName("jess.day.one")
+
+copy
+final case class UserName(value: String) extends AnyVal
+val seven: Parser[UserName] = {
+    val name = alpha.rep1.string
+    ((name.soft ~ char('.')).rep ~ name).string.map(UserName)
+}
+
+The new operator we are showcasing here is soft. soft is very similar to backtrack in that it is only used for describing what to do when dealing with errors. The soft operator is a provided way to tell the parser executor how to handle a scenario where a parser succeeds and then a different parser down a line of ~ fails. Basically, this operator tells the executor that if a later parser fails, un-consume any characters that this parser previously consumed. In the above Username example, this looks like the following:
+
+    Consume name successfully
+    Fail to consume char('.')
+    Un-consume name
+    Consume the second name successfully
+
+If the first name parser did not contain the soft modifier, it would not un-consume name when char('.') failed. This would lead to the second name also failing. We don't want this since our UserNames can be a singular name that doesn't contain any dots.
+
+In short, backtrack tells the executor what to do when the parser it is currently on fails and soft tells the parser what to do when a later parser (composed using ~) fails.
+Fundamental Eight
+
+Construct a parser that will return successfully for any input that is composed entirely of allowedChars. The string returned in a successful result should just be the same as the string that was being parsed to begin with.
+
+Example input:
+
+    Allowed chars: List('a', 'b', 'c')
+    Input string: "abc"
+
+Example output: "abc"
+
+copy
+def eight(allowedChars: List[Char]): Parser[String] = {
+    charIn(allowedChars).rep1.string
+}
+
+The charIn parser is an easy way of representing that any one of a list of characters is acceptable input. This example is also illustrating that you can dynamically create different parsers based on input parameters.
+Fundamental Nine
+
+Create a parser for CarTypes where a CarType is the make and a model of a car. The make and model each may only be composed of alphabetical characters. The input will be given as a make and model separated by a space. The model of the car may or may not be provided.
+
+Example input: Nissan Versa
+
+Example output: CarType("Nissan", Some("Versa"))
+
+copy
+val nine: Parser[CarType] = {
+    val make = alpha.rep1.string
+    val model = alpha.rep1.string.?
+    ((make <* sp.?) ~ model).map(CarType.tupled)
+}
+
+This parser introduces the concept of optional fields. We marked model and the space with a .? to indicate that those fields may or may not be present in the text being parsed. Adding the question mark operator will change the return type of a parser to make it optional. For example, a parser of type Parser[String] would become Parser[Option[String]] when the .? is applied to it.
+Fundamentals: Wrapping Up
+
+Hopefully these fundamentals have given you an idea of the power of the cats-parse library. Each of these examples has covered a principle that I used to solve the main challenge for this month. As such, you should now have all the tools you need to move on and solve the main challenge!
+Challenge
+
+When I begin to create a parser, I start by creating sub-parsers that will each parse a tiny part of my input. That way, I can reason about each piece on its own and then combine all of them together using combinators. In the case of this challenge, we are going to parse files, ranks, squares, piece types, check statuses, disambiguators, moves, turns, outcomes, and finally the game itself. This sounds like a lot of parsers, but most of them are quite simple and taking it one piece at a time makes it manageable.
+
+To start off, I am going to put each of my sub-parsers inside of the private val parser: Parser[Game] = ??? that is provided in the starter code. This will look like:
+
+copy
+private val parser: Parser[Game] = {
+    // all of our sub-parsers will go here
+}
+
+Files
+
+copy
+val file: Parser[File] = {
+    import File._
+    val files = Map('a' -> A, 'b' -> B, 'c' -> C, 'd' -> D, 'e' -> E, 'f' -> F, 'g' -> G, 'h' -> H)
+    charIn(files.keys.toList).map(files.get(_).get)
+}
+
+Here I am creating a mapping between the char I expect to represent a given file and the case object in the model that represents that same file. From there, I am using charIn to provide all of those chars as possible input and then a map to get from the input char into the model. There are certainly other ways to do this, you could for example write:
+
+copy
+char('a').as(A) orElse char('b').as(B) orElse char('c').as(C) // etc
+
+But I thought creating a specific mapping was a more elegant solution. Also note that I am doing an unsafe .get on the result of the files.get operation. This is actually not an unsafe get in this context because in order for us to get to this point in the code, we must have received a valid input character from charIn to begin with.
+Ranks
+
+The parser for ranks is essentially the exact same as it is for files.
+
+copy
+val rank: Parser[Rank] = {
+    import Rank._
+    val ranks = Map('1' -> One, '2' -> Two, '3' -> Three, '4' -> Four, '5' -> Five, '6' -> Six, '7' -> Seven, '8' -> Eight)
+    charIn(ranks.keys.toList).map(ranks.get(_).get)
+}
+
+Square
+
+A square is a combination of a file and then a rank. We can write this parser as:
+
+copy
+val square: Parser[Square] = (file ~ rank).map(Square.tupled)
+
+Piece Types
+
+This parser is once again basically the same as ranks and files.
+
+copy
+val pieceType: Parser[PieceType] = {
+    import PieceType._
+    val pieceTypes = Map('K' -> King, 'Q' -> Queen, 'R' -> Rook, 'B' -> Bishop, 'N' -> Knight)
+    charIn(pieceTypes.keys.toList).map(pieceTypes.get(_).get)
+}
+
+If you are starting to get uncomfortable with the code duplication between the parsers in file, rank, and piece type then you can break this logic out into a common function.
+
+copy
+def parserFromMapping[A](mapping: Map[Char, A]): Parser[A] = {
+    charIn(mapping.keys.toList).map(mapping.get(_).get)
+}
+
+val pieceType: Parser[PieceType] = {
+    import PieceType._
+    val pieceTypes = Map('K' -> King, 'Q' -> Queen, 'R' -> Rook, 'B' -> Bishop, 'N' -> Knight)
+    parserFromMapping(pieceTypes)
+}
+
+Check Statuses
+
+A check status can be either a Check or a Checkmate. In PGN, this is represented as + or # respectively.
+
+copy
+val check: Parser[CheckStatus] = {
+    val c = char('+').as(CheckStatus.Check)
+    val cm = char('#').as(CheckStatus.Checkmate)
+    c orElse cm
+}
+
+Disambiguators
+
+Disambiguators can be one of three types: file, rank, or file and rank. You will notice that we can reuse some of the parsers we created earlier to create this parser. This is because a FileSource is really just a File, a RankSource is really just a Rank, and FileAndRankSource is really just a Square.
+
+copy
+val disambiguator: Parser[Disambiguator] = {
+    import Disambiguator._
+    val fileSource = file.map(FileSource)
+    val rankSource = rank.map(RankSource)
+    val fileAndRankSource = square.map(FileAndRankSource)
+    oneOf(List(fileAndRankSource.backtrack, fileSource, rankSource))
+}
+
+Notice that fileAndRankSource has a .backtrack after it. This is because fileAndRankSource may consume input intended for fileSource. Adding .backtrack will cause fileAndRankSource to un-consume the file so that fileSource can use it.
+Moves
+
+Moves are the most complex part of our parser. They are the point where all of the parsers we have built so far need to combine to make sense of our input. For this reason, I will put the full move parser code down, but then I will go through each section of it individually as well.
+
+copy
+val move: Parser[Move] = {
+    import Move._
+    val castle: Parser[Castle] = {
+        val kingSide = string("O-O").as(Castle.KingSide)
+        val queenSide = string("O-O-O").as(Castle.QueenSide)
+        queenSide orElse kingSide
+    }
+
+    val nonPawn: Parser[Standard] = (pieceType ~ char('x').? ~ square ~ check.?)
+        .map { case (((pt, x), s), c) => Standard(pt, s, None, x.isDefined, c) }
+    val nonPawnD: Parser[Standard] = (pieceType ~ disambiguator ~ char('x').? ~ square ~ check.?)
+        .map { case ((((pt, d), x), s), c) => Standard(pt, s, Some(d), x.isDefined, c) }
+    val promotion: Parser[PieceType] = char('=') *> pieceType
+    val pawn: Parser[Move] = ((file.soft ~ char('x')).? ~ square ~ promotion.? ~ check.?)
+        .map { case (((fx, sq), promo), cs) =>
+            val pMove = PawnMove(fx.map(_._1), sq, fx.isDefined, cs)
+            promo.map(Promotion(pMove, _)).getOrElse(pMove)
+        }
+
+    oneOf(List(castle, nonPawnD.backtrack, nonPawn, pawn))
+}
+
+Let's go through this one section at a time.
+Castle
+
+copy
+val castle: Parser[Castle] = {
+    val kingSide = string("O-O").as(Castle.KingSide)
+    val queenSide = string("O-O-O").as(Castle.QueenSide)
+    queenSide orElse kingSide
+}
+
+This is the simplest Move parser that we will build. The main thing to note with this parser is that we do NOT need a backtrack on queenSide even though queenSide and kingSide share some of the same characters in their input. This is because we are using string rather than building these parsers up from individual chars. This makes it so that when the input is being parsed, the entire token must be present in order for it to consume any of the input. The only restriction we have when composing queenSide and kingSide is that queenSide needs to come first since kingSide would succeed even on a queenSide input by just not consuming the extra -O.
+Non-Pawn
+
+copy
+val nonPawn: Parser[Standard] = (pieceType ~ char('x').? ~ square ~ check.?)
+    .map { case (((pt, x), s), c) => Standard(pt, s, None, c, x.isDefined) }
+val nonPawnD: Parser[Standard] = (pieceType ~ disambiguator ~ char('x').? ~ square ~ check.?)
+    .map { case ((((pt, d), x), s), c) => Standard(pt, s, Some(d), c, x.isDefined) }
+
+As you can see, we actually need two parsers to encapsulate the possibilities of all non-pawn (standard) moves. The reason for this is that non-pawn moves can contain disambiguators which will potentially consume file, rank, or square characters from the input. This is problematic since we also have a square present later on in the same parser. This leads to a situation where the parser cannot tell if the input characters are for the disambiguator or if they are for the square.
+
+To show this in code, if we tried to write nonPawn as a single parser that looked something like:
+
+copy
+(pieceType ~ disambiguator.? ~ char('x').? ~ square ~ check.?)
+
+There are several scenarios where this parser would work, but it would fail under the following conditions:
+
+    The x is not present in the input and there is also no disambiguator present. In this case, the parser would believe that the square it encountered was a disambiguator and thus would not have anything to parse into the later square parser. An example of such an input would be Ke7. The parser would think that e7 was a disambiguator rather than an end square and so the parser would fail.
+
+With all of that in mind, the remainder of understanding nonPawn and nonPawnD is fairly straight forward. We ~ together all of the inputs in the order that we expect them and mark the optional inputs with .? to indicate they may or may not actually be there.
+Pawn
+
+copy
+val promotion: Parser[PieceType] = char('=') *> pieceType
+val pawn: Parser[Move] = ((file.soft ~ char('x')).? ~ square ~ promotion.? ~ check.?)
+    .map { case (((fx, sq), promo), cs) =>
+        val pMove = PawnMove(fx.map(_._1), sq, fx.isDefined, cs)
+        promo.map(Promotion(pMove, _)).getOrElse(pMove)
+    }
+
+The most notable part of this parser is the inclusion of .soft after file. This is there because if the parser fails by not seeing an x character (which is acceptable since it is marked optional), we want it to un-consume the file so that the square parser can pick that file up itself. (for more on this subject see fundamental 7)
+
+If the PawnMove ends up being a promotion then we map it into the Promotion class which includes a PawnMove as its first parameter.
+Combining Move Parsers
+
+Now that we have built the parsers for each move type, we need to combine them.
+
+copy
+oneOf(List(castle, nonPawnD.backtrack, nonPawn, pawn))
+
+We have to be careful about the ordering in which we compose these parsers as well as where we place any backtracks. A backtrack is needed on nonPawnD because there are multiple characters in common between nonPawnD and nonPawn. Putting a backtrack on nonPawnD tells the parser to un-consume those characters when a failure is encountered so that nonPawn can potentially consume them.
+
+In terms of ordering, nonPawnD must be before nonPawn. This is because nonPawn could succeed erroneously on a nonPawnD input. By putting them in this order, we ensure that the more specific parser comes first and will be used when appropriate.
+Turns
+
+A single turn in PGN is made up of a turn number, followed by a dot, followed by whitespace, followed by a move, then more whitespace, another move, and then more whitespace.
+
+This looks like:
+
+Question marks denote optional fields below.
+
+<turn number><dot><whitespace><move><whitespace><move ?><whitespace>
+
+copy
+val turn: Parser1[Turn] = {
+    import Turn._
+    val anyWhiteSpace = oneOf1(List(wsp, cr, crlf, lf)).rep
+    val turnNumber = digit.rep1 *> char('.') *> anyWhiteSpace
+    val mv1 = move
+    val mv2 = move.surroundedBy(anyWhiteSpace)
+    val fullTurn = (mv1 ~ mv2).map(FullTurn.tupled)
+    val partialTurn = (mv1 <* anyWhiteSpace).map(PartialTurn)
+    val t = fullTurn.backtrack orElse partialTurn
+    turnNumber *> t
+}
+
+The first thing we create in this parser is a sub-parser called anyWhiteSpace which is able to recognize any whitespace characters that we may encounter. These include spaces, tabs, and various line endings. The next parser we build is for a turn number followed by a dot and then whitespace. After that, we construct parsers for each of the moves within the turn. The second move, if present, will be surrounded by whitespace.
+
+Using all of these parsers, we are able to then construct parsers for FullTurn and PartialTurn. These are combined using an orElse with a backtrack on fullTurn. This backtrack will allow fullTurn to un-consume the first move of a PartialTurn when it encounters one so that partialTurn can be properly constructed. Finally, we combine our different turn-types with the turnNumber parser to create the complete turn parser.
+Outcomes
+
+After the move and turn parsers, this parser is quite simplistic.
+
+copy
+val outcome: Parser[Outcome] = {
+    import Outcome._
+    val draw = string("1/2-1/2").as(Draw)
+    val whiteWins = string("1-0").as(WhiteWins)
+    val blackWins = string("0-1").as(BlackWins)
+    val unknown = char('*').as(Unknown)
+    oneOf(List(draw.backtrack, whiteWins, blackWins, unknown))
+}
+
+Here we construct the parsers for the different types of game outcomes and combine them using a oneOf. The first parser, draw needs to have a backtrack on it since it contains a '1' at the beginning of it and so does whiteWins.
+Game
+
+At last, we are through creating all of our sub-parsers! Now we can combine turns with the outcome to create a game.
+
+copy
+(turn.backtrack.rep1 ~ outcome).map(Game.tupled)
+
+We use rep1 since there must be at least one turn and we are also backtracking because a turn starts with a digit and so do several of the outcomes.
+Conclusion
+
+You should now be able to run the tests in the project and see them all pass! If you are having any issues or would like help on your way, join the Scala Monthly Discord to ask any questions or get help.
+
+Cats-parse is a powerful library to add to your tool-belt. I recently worked with it for building an ipv6 parser for http4s and fell in love with the syntax and simplicity of the library. I hope this exercise helped you catch the vision of what cats-parse is capable of.
+
+If you send a tweet prior to February 1, 2020 (00:00 UTC) containing a link to your solution and mentioning @scalamonthly, you will be entered into a drawing to win a $25 Amazon gift card. (Terms and conditions apply)
+
+Thank you for participating in the first ever Scala Monthly! Please reach out to me with any feedback you have to make Scala Monthly better.
+
+Built by Jeff Lewis
+Privacy Policy
+Code of Conduct
+Giveaway Terms
+
+By using this site, you agree that you have read and understand its Privacy Policy.

@@ -28,7 +28,7 @@ object fundamentals {
       * Example input: 1
       * Example output: Binary.One
       */
-    val one: Parser[Binary] = ???
+    val one: Parser[Binary] = char('1').string.map(_ => Binary.One).orElse(char('0').string.map(_ => Binary.Zero))
 
     final case class LetterAndNumber(value: String) extends AnyVal
     /**
@@ -40,7 +40,7 @@ object fundamentals {
       * 
       * Hint: Look inside of `cats.parse.Rfc5234` for help with parsing numbers and letters.
       */
-    val two: Parser[LetterAndNumber] = ???
+    val two: Parser[LetterAndNumber] = (alpha ~ digit).string.map(LetterAndNumber)
 
     final case class BinaryList(value: NonEmptyList[Binary]) extends AnyVal
     /**
@@ -51,7 +51,10 @@ object fundamentals {
       * Example input: 1001
       * Example output: BinaryList(NonEmptyList.of(Binary.One, Binary.Zero, Binary.Zero, Binary.One))
       */
-    val three: Parser[BinaryList] = ???
+    val three: Parser[BinaryList] =  {
+      val binary = char('0').as(Binary.Zero) orElse1 char('1').as(Binary.One)
+        binary.rep1.map(BinaryList)
+    }
 
     final case class Name(value: String) extends AnyVal
     /**
@@ -62,7 +65,10 @@ object fundamentals {
       * Valid example input: Brian O'Brien III
       * Example output: Name("Brian O'Brien III")
       */
-    val four: Parser[Name] = ???
+    val four: Parser[Name] = {
+      val str = List(alpha, sp, char('\''))
+      (alpha ~ oneOf1(str).rep).string.map(Name)
+    }
 
     final case class Score(left: Int, right: Int)
     /**
@@ -72,7 +78,10 @@ object fundamentals {
       * Example input: 123 - 456
       * Example output: Score(123, 456)
       */
-    val five: Parser[Score] = ???
+    val five: Parser[Score] = {
+      val multiDigit = digit.rep1.string.map(_.toInt)
+      ((multiDigit <* char('-').surroundedBy(char(' '))) ~ multiDigit).map(Score.tupled)
+    }
 
     sealed abstract class MyTuple extends Product with Serializable
     object MyTuple {
@@ -90,7 +99,12 @@ object fundamentals {
       * Example input 2: one,2,three
       * Example output 2: MyTuple.Three("one", "2", "three")
       */
-    val six: Parser[MyTuple] = ???
+    val six: Parser[MyTuple] = {
+      val str = alpha.rep1.string
+      val twoParser = ((str <* char(',')) ~ str).map(MyTuple.Two.tupled)
+      val threeParser = (((str <* char(',')) ~ str <* char(',')) ~ str).map{case ((a,b),c) => MyTuple.Three(a,b,c)}
+      threeParser.backtrack.orElse(twoParser)
+    }
 
     final case class UserName(value: String) extends AnyVal
     /**
@@ -100,7 +114,10 @@ object fundamentals {
       * Example input: jess.day.one
       * Example output: UserName("jess.day.one")
       */
-    val seven: Parser[UserName] = ???
+    val seven: Parser[UserName] ={
+      val str = alpha.rep1.string
+      ((str.soft ~ char('.')).rep ~ str).string.map(UserName)
+    }
 
     /**
       * Construct a parser that will return successfully for any input that is composed entirely of `allowedChars`.
@@ -114,7 +131,9 @@ object fundamentals {
       * @param allowedChars chars that are to be allowed inside of this string
       * @return a parser returning a string when the input is valid
       */
-    def eight(allowedChars: List[Char]): Parser[String] = ???
+    def eight(allowedChars: List[Char]): Parser[String] = {
+      charIn(allowedChars).rep1.string
+    }
 
     final case class CarType(make: String, model: Option[String])
 
@@ -126,6 +145,9 @@ object fundamentals {
       * Example input: Nissan Versa
       * Example output: CarType("Nissan", Some("Versa"))
       */
-    val nine: Parser[CarType] = ???
+    val nine: Parser[CarType] = {
+      val str = alpha.rep1.string
+      ((alpha ~ str).string ~ (char(' ') *> str).?).map(CarType.tupled)
+    }
 
 }
