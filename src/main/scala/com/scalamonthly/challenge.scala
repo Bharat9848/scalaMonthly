@@ -1,5 +1,10 @@
 package com.scalamonthly
 
+import monocle.{Prism, Traversal}
+import monocle.function.Plated
+import cats.implicits._
+import monocle.macros.{GenLens, GenPrism}
+
 object challenge {
 
   sealed abstract class IdeaSize extends Product with Serializable
@@ -30,8 +35,15 @@ object challenge {
     * @param idea The idea to perform inception with.
     * @return The updated representation of all Dreams, but with the idea placed into the appropriate dream.
     */
-  def inception(possibleDreams: Dream, destinationDreamId: String, idea: Idea): Dream = ???
+  def inception(possibleDreams: Dream, destinationDreamId: String, idea: Idea): Dream = Plated.transform[Dream]{
+    dream => if(destinationDreamId == dream.id) { Dream(dream.id, Some(idea), dream.childDreams)}else dream
+  }(possibleDreams)
 
+  private implicit def dreamPlated[A]: Plated[Dream] = Plated(
+    new Traversal[Dream, Dream] {
+      def modifyF[F[_]: cats.Applicative](f: Dream => F[Dream])(s: Dream): F[Dream] = {
+        s.childDreams.traverse(f).map(childDreams => s.copy(childDreams= childDreams))
+      }})
   /**
     * Given a representation of all possible dreams, the id of an author, and a totem,
     * update all occurrences of the author with the given id to have the new totem
@@ -42,6 +54,18 @@ object challenge {
     * @param totem The totem we are giving the author with the target id
     * @return The updated representation of Dreams containing the updates to the author's totem 
     */
-  def updateTotem(possibleDreams: Dream, authorId: String, totem: Totem): Dream = ???
+  def updateTotem(possibleDreams: Dream, authorId: String, totem: Totem): Dream = {
+    val idea = GenLens[Dream](_.idea)
+    val authorLens = GenLens[Idea](_.origin.author)
+    val totemLens = GenLens[Author](_.totem)
+    val optionPrism = Prism.partial[Option[Idea], Idea]{case Some(idea) => idea}(idea => Some(idea))
+    Plated.transform[Dream](dream1  => idea.composePrism(optionPrism).composeLens(authorLens).modify(author => if (author.id == authorId) {
+      println(s"updating totem for id $author")
+      totemLens.set(totem)(author)
+    } else {
+      println(s"NOT updating totem for id $author");
+      author
+    })(dream1))(possibleDreams)
+  }
 
 }
