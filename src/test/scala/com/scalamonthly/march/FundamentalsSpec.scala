@@ -1,11 +1,10 @@
-package com.scalamonthly
+package com.scalamonthly.march
 
-import java.time.Instant
 import java.util.UUID
 
 object FundamentalsSpec extends weaver.SimpleIOSuite {
 
-  import fundamentals._
+  import com.scalamonthly.march.fundamentals._
 
   private def test[A, B](input: A, expected: B, f: A => B): weaver.Expectations = {
     expect(f(input) == expected)

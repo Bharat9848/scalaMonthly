@@ -1,9 +1,8 @@
-package com.scalamonthly
+package com.scalamonthly.march
 
-import monocle.{Prism, Traversal}
 import monocle.function.Plated
-import cats.implicits._
-import monocle.macros.{GenLens, GenPrism}
+import monocle.macros.GenLens
+import monocle.{Prism, Traversal}
 
 object challenge {
 
@@ -52,7 +51,7 @@ object challenge {
     * @param dream Representation of all possible dreams
     * @param authorId Id of the author whose totem we are updating
     * @param totem The totem we are giving the author with the target id
-    * @return The updated representation of Dreams containing the updates to the author's totem 
+    * @return The updated representation of Dreams containing the updates to the author's totem
     */
   def updateTotem(possibleDreams: Dream, authorId: String, totem: Totem): Dream = {
     val idea = GenLens[Dream](_.idea)

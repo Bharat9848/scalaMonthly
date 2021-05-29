@@ -1,8 +1,8 @@
-package com.scalamonthly
+package com.scalamonthly.march
 
 object ChallengeSpec extends weaver.SimpleIOSuite {
 
-  import challenge._
+  import com.scalamonthly.march.challenge._
 
   pureTest("perform inception by placing idea into dream with target id") {
     val input = Dream("one", None, List(

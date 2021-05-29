@@ -1,16 +1,10 @@
-package com.scalamonthly
+package com.scalamonthly.march
 
 import java.util.UUID
 
-import cats.Applicative
-import monocle.macros.{GenLens, GenPrism}
-import monocle.std.option.some
-import com.scalamonthly.fundamentals.Animal.DogName
-import monocle.{Optional, Prism, Traversal}
-import com.scalamonthly.fundamentals.Animal.Dog
 import monocle.function.Plated
-import cats.implicits._
-import com.scalamonthly.fundamentals.Tree.{Branch, Leaf}
+import monocle.macros.GenLens
+import monocle.{Prism, Traversal}
 
 object fundamentals {
 
@@ -72,7 +66,7 @@ object fundamentals {
 
   final case class HouseholdOccupants(owner: Person, pet: Animal)
   final case class Household(id: UUID, occupants: HouseholdOccupants)
-  
+
   /**
     * If the household pet is a dog, append " II" to its name and return the entire household.
     */
@@ -90,7 +84,7 @@ object fundamentals {
 
   /**
     * Add 1 to every leaf node inside of the tree.
-    * 
+    *
     * Hint: Look at the Plated type-class from Monocle.
     */
  /* def seven(tree: Tree[Int]): Tree[Int] = {
