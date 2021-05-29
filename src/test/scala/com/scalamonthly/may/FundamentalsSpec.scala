@@ -1,8 +1,8 @@
-package com.scalamonthly
+package com.scalamonthly.may
 
-import scala.util.Try
-import scala.util.Failure
 import cats.data.NonEmptyList
+
+import scala.util.{Failure, Try}
 
 object FundamentalsSpec extends weaver.SimpleIOSuite {
 

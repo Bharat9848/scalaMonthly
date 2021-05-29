@@ -1,6 +1,5 @@
-package com.scalamonthly
+package com.scalamonthly.may
 
-import cats.implicits._
 import scala.util.Try
 
 object ChallengeSpec extends weaver.SimpleIOSuite {
@@ -15,6 +14,20 @@ object ChallengeSpec extends weaver.SimpleIOSuite {
     expect.same("Estd td l epde. Epdetyr, estd td l epde.", output)
   }
 
+  pureTest("stringRightShift") {
+    val shiftBy = 11
+    val input = "This"
+    val output = stringRightShift(input, shiftBy)
+    expect.same("Estd", output)
+  }
+
+  pureTest("stringLeftShift") {
+    val shiftBy = 11
+    val input = "Estd"
+    val output = stringLeftShift(input, shiftBy)
+    expect.same("This", output)
+  }
+
   pureTest("encrypt and decrypt") {
     val shiftBy = 10
     val input = "This is a test. Testing, this is a test."
@@ -25,7 +38,8 @@ object ChallengeSpec extends weaver.SimpleIOSuite {
   pureTest("brute force decrypt - 1") {
     val shiftBy = 12
     val input = "Apple’s fiscal second quarter earnings come with a legal backdrop: the company faces an imminent courtroom battle with Fortnite developer Epic Games. Depositions from both companies have already been filed, and senior executives are expected to provide extensive testimony starting next week."
-    val output = crackTheCode[Try, String](encrypt(input, shiftBy)).get
+    val encryptedStr = encrypt(input, shiftBy)
+    val output = crackTheCode[Try, String](encryptedStr).get
     expect.same(input, output)
   }
 

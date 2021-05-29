@@ -1,4 +1,4 @@
-package com.scalamonthly
+package com.scalamonthly.may
 
 object model {
 
@@ -34,5 +34,5 @@ object model {
   }
 
   trait StringCodec[A] extends StringEncoder[A] with StringDecoder[A]
-  
+
 }
